@@ -1,0 +1,50 @@
+name: Build & Deploy Flask App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # 2. Build Docker image
+    - name: Build Docker image
+      run: |
+        docker build -t flask-app .
+
+    # 3. Save Docker image as a tar file
+    - name: Save Docker image
+      run: |
+        docker save flask-app -o flask_app.tar
+
+    # 4. Copy Docker image to Windows VM
+    - name: Copy Docker image to Windows VM
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.WIN_VM_IP }}
+        username: ${{ secrets.WIN_VM_USER }}
+        password: ${{ secrets.WIN_VM_PASSWORD }}
+        port: 22
+        source: "flask_app.tar"
+        target: "C:/Users/Administrator/deploy/"
+
+    # 5. SSH into Windows VM and run the container
+    - name: Run Docker on Windows VM
+      uses: appleboy/ssh-action@v0.1.6
+      with:
+        host: ${{ secrets.WIN_VM_IP }}
+        username: ${{ secrets.WIN_VM_USER }}
+        password: ${{ secrets.WIN_VM_PASSWORD }}
+        port: 22
+        script: |
+          docker load -i C:/Users/Administrator/deploy/flask_app.tar
+          docker stop flask-app || true
+          docker rm flask-app || true
+          docker run -d -p 5000:5000 --name flask-app flask-app
